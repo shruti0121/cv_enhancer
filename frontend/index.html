@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CV Enhancer – Sharpen your resume bullets</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="site-header">
+    <h1>CV Enhancer</h1>
+    <p class="tagline">Paste a job description and your rough bullets. Get them back sharper and tailored to the role.</p>
+  </header>
+
+  <main class="workspace">
+    <section class="inputs" aria-label="Your input">
+      <label for="jobDescription">Job description</label>
+      <textarea id="jobDescription" rows="8" maxlength="5000"
+        placeholder="Paste the job posting you're applying for…"></textarea>
+
+      <label for="bullets">Your current bullets</label>
+      <textarea id="bullets" rows="6" maxlength="3000"
+        placeholder="One per line, e.g.&#10;Worked on the payments service&#10;Helped with the migration to Lambda"></textarea>
+
+      <!-- <p class="hint">Describe real work. The tool rewrites how you say it, not what you did.</p> -->
+
+      <button id="enhanceBtn" type="button">Enhance bullets</button>
+      <p id="error" class="error" role="alert" hidden></p>
+    </section>
+
+    <section class="output" aria-label="Enhanced bullets" aria-live="polite">
+      <div class="sheet">
+        <div class="sheet-head">
+          <h2>Enhanced bullets</h2>
+          <button id="copyBtn" type="button" class="secondary" hidden>Copy</button>
+        </div>
+        <p id="empty" class="empty">Your rewritten bullets will appear here.</p>
+        <ul id="results" class="results"></ul>
+      </div>
+    </section>
+  </main>
+
+  <script src="./script.js"></script>
+</body>
+</html>
