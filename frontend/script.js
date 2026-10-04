@@ -18,18 +18,37 @@ copyBtn.addEventListener("click", copyResults);
 async function enhance() {
   const jobDescription = jobInput.value.trim();
   const bullets = bulletsInput.value.trim();
-
   // Basic validation
   if (!jobDescription || !bullets) {
     showError("Add both a job description and at least one bullet.");
+    return;
+  }
+  if (jobDescription.length > 6000) {
+    showError("The job description is too long (maximum 6,000 characters).");
+    return;
+  }
+  if (bullets.length > 3000) {
+    showError("Your bullets are too long (maximum 3,000 characters).");
     return;
   }
 
   hideError();
   setLoading(true);
 
+let apiBase = null;
+
+async function getApiBase() {
+  if (!apiBase) {
+    const res = await fetch("/config.json");
+    const config = await res.json();
+    apiBase = config.apiUrl;
+  }
+  return apiBase;
+}
+
   try {
-    const response = await fetch(API_URL, {
+    const base = await getApiBase();
+    const response = await fetch(`${base}cv_enhancer`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ jobDescription, bullets })

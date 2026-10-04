@@ -71,11 +71,7 @@ export class InfraStack extends Stack {
     })
        
     
-    new s3deploy.BucketDeployment(this, "DeployWebsite", {
-      sources: [s3deploy.Source.asset("../frontend")],
-      destinationBucket: myBucket,
-    });
-
+   
 
     const certificate = acm.Certificate.fromCertificateArn(
       this,
@@ -117,6 +113,15 @@ export class InfraStack extends Stack {
     });
 
 
+    new s3deploy.BucketDeployment(this, "DeployWebsite", {
+      sources: [s3deploy.Source.asset("../frontend"),
+      s3deploy.Source.jsonData("config.json", { apiUrl: apigate.url }),
+      ],
+      destinationBucket: myBucket,
+    });
+
+
+
     // const db_pastqueries = new dynamo.Table(this, "CVenhancerTable", {
     //   tableName: "CV_Enhancer",
     
@@ -137,7 +142,7 @@ export class InfraStack extends Stack {
   
     const querylambda = new lambda.Function(this, "querylambda",
       {
-        runtime: lambda.Runtime.NODEJS_24_X,
+        runtime: lambda.Runtime.PYTHON_3_13,
         handler:"query.handler",
         code : lambda.Code.fromAsset("../backend/lambda"),
         timeout: Duration.seconds(25),
@@ -170,11 +175,6 @@ export class InfraStack extends Stack {
     //   "GET",
     //   new apigateway.LambdaIntegration(databaselambda)    
     // );
-
-
-
-    
-
 
   }
 
