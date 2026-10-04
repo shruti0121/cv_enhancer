@@ -4,7 +4,7 @@ A serverless GenAI app on AWS that rewrites rough resume bullets into stronger, 
 
 **Live demo:** [cvenhancer.shruti-singla.com](https://cvenhancer.shruti-singla.com)
 
-Paste a job description and a few bullets, and the app returns rewritten bullets that use strong action verbs and relevant keywords, without inventing experience, numbers, or skills.
+Paste a job description and a few bullets, and the app returns rewritten bullets that use strong action verbs and relevant keywords, without inventing experience or skills.
 
 | Input | Output |
 |---|---|
@@ -22,10 +22,13 @@ The second row matters most: the app improves wording but never claims experienc
 | Layer | Service | Purpose |
 |---|---|---|
 | Frontend | S3 + CloudFront + Route 53 + ACM | Static site served over HTTPS on a custom domain. The bucket is private and only reachable through CloudFront (Origin Access Control). |
-| API | API Gateway (REST) | Public endpoints with throttling and CORS locked to the site's domain |
+| API | API Gateway (REST) | Public endpoint with throttling and CORS locked to the site's domain |
 | Compute | AWS Lambda (Python 3.13) | Validates input, builds the prompt, calls the model |
 | AI | Amazon Bedrock, Claude Haiku 4.5 | Rewrites the bullets, called through a US cross-region inference profile |
+| Monitoring | CloudWatch Logs | Captures errors and stack traces from the Lambda |
 | Infrastructure | AWS CDK (TypeScript) | The entire stack is defined as code and deploys with one command |
+
+The app is stateless: nothing the user pastes is stored. Each request goes from the browser to API Gateway, through Lambda to Bedrock, and the rewritten bullets come straight back.
 
 ---
 
@@ -37,8 +40,7 @@ cv_enhancer/
 │   ├── bin/               # Entry point: account, region, stack instance
 │   └── lib/               # Stack definition: every AWS resource
 ├── backend/lambda/
-│   ├── query.py           # POST /cv_enhancer: calls Bedrock
-│   └── database.py        # GET /cv_enhancer_database: reads history
+│   └── query.py           # POST /cv_enhancer: validates input and calls Bedrock
 ├── frontend/              # Static site (HTML, CSS, JS)
 └── evals/
     ├── cases.json         # 16 prompt test cases
@@ -51,15 +53,17 @@ cv_enhancer/
 
 ### Prompt engineering is the real work
 
-Connecting the AWS services is straightforward. Making the model produce useful, consistent, *honest* output is not. The system prompt sets strict rules: start with action verbs, focus on impact, keep the same number of bullets, return only the bullets, and above all, never invent numbers, tools, technologies, or achievements. The prompt is kept separate from the user's input (system prompt vs. user message), so users can't easily override the rules.
+Connecting the AWS services is straightforward. Making the model produce useful, consistent, *honest* output is not. The system prompt sets strict rules: start with action verbs, focus on impact, keep the same number of bullets, return only the bullets, and above all, never invent experience, tools, technologies, or achievements. The prompt is kept separate from the user's input (system prompt vs. user message), so users can't easily override the rules.
 
 ### Prompt evaluation
 
 There's no off-the-shelf benchmark for "is this a good resume bullet," so I built my own eval set. See [Prompt evaluation](#prompt-evaluation) below.
 
+
+
 ### Least privilege IAM
 
-Each Lambda has its own IAM role with only the permissions it needs. Instead of broad managed policies like `AmazonDynamoDBFullAccess`, CDK grants are scoped to the single table: the read Lambda gets `grantReadData`, and only the enhance Lambda can call Bedrock (`bedrock:InvokeModel` on foundation models and inference profiles).
+The Lambda has its own IAM role with only what it needs: permission to write its logs and to call `bedrock:InvokeModel` on foundation models and inference profiles. No broad managed policies, and no access to any other service.
 
 ### Cost protection
 
@@ -70,6 +74,7 @@ Every call to the public API costs money on Bedrock, so cost control is built in
 - **`maxTokens`** caps the length of each model response.
 - **An AWS Budgets alert** sends an email if monthly spend goes above a set threshold.
 - **Claude Haiku 4.5** was chosen over larger models: it's fast and inexpensive, and rewriting bullets doesn't need a frontier model.
+- **Fully serverless**: no VPC, NAT Gateways, load balancers, or containers, so the stack costs almost nothing when nobody is using it.
 
 ### Validation in layers
 
@@ -80,7 +85,7 @@ The frontend can always be bypassed, so it never replaces the backend check.
 
 ### CORS restricted to one domain
 
-The API and both Lambdas only allow requests from `https://cvenhancer.shruti-singla.com`, so other websites can't use this API from their visitors' browsers. CORS is enforced by browsers only and doesn't stop curl or scripts, which is why throttling is still needed.
+The API and the Lambda only allow requests from `https://cvenhancer.shruti-singla.com`, so other websites can't use this API from their visitors' browsers. CORS is enforced by browsers only and doesn't stop curl or scripts, which is why throttling is still needed.
 
 ### Solving the API URL chicken-and-egg problem
 
@@ -94,7 +99,7 @@ The frontend fetches `/config.json` on load. Nothing is hardcoded, the file is r
 
 ### Timeouts
 
-API Gateway REST APIs have a 29-second integration timeout. The enhance Lambda's timeout is set below that, so the Lambda finishes (or fails cleanly with its own error response) before API Gateway gives up. Lambda's default of 3 seconds would be too short for a model call.
+API Gateway REST APIs have a 29-second integration timeout. The Lambda's timeout is set below that, so it finishes (or fails cleanly with its own error response) before API Gateway gives up. Lambda's default of 3 seconds would be too short for a model call.
 
 ### Errors are logged, not leaked
 
@@ -121,18 +126,16 @@ The eval set lives in `evals/cases.json`: 16 cases, each designed to catch a spe
 
 - **Bullet count** matches the input
 - **Format**: every line starts with `- ` (also catches intros like "Here are your bullets!")
-- **Invented numbers**: any number in the output that isn't in the input fails
+- **New numbers**: any number in the output that isn't in the input is flagged
 - **Forbidden phrases**: case-specific words that would mean fabrication (for example, "AWS" in the barista case)
 
-Each case is run multiple times, because outputs vary between runs at temperature 0.3.
+Each case is run multiple times, because outputs vary between runs at temperature 0.3. Automated checks flag problems; I review the flagged outputs myself before deciding whether the prompt needs to change.
 
 ### What the eval caught
 
-**Derived metrics.** The model turned "grew monthly revenue from $8,000 to $12,500" into "drove 56% revenue growth." The math was correct, but LLM arithmetic isn't reliable, and users would have to defend a number they didn't write. I added a rule against calculating new figures, and the eval confirmed the fix.
+**Fabricated experience.** For a barista applying to a cloud engineering job, the model rewrote "made coffee drinks for customers" as "architected and deployed serverless solutions using AWS Lambda." The original rule ("use keywords where they honestly apply") wasn't strong enough when the experience didn't match. I added rules requiring each bullet to describe the same task as the original, and to highlight transferable skills instead of borrowing the job description's tools. The eval confirmed the fix.
 
-**Fabricated experience.** For a barista applying to a cloud engineering job, the model rewrote "made coffee drinks for customers" as "architected and deployed serverless solutions using AWS Lambda." The original rule ("use keywords where they honestly apply") wasn't strong enough when the experience didn't match. I added rules requiring each bullet to describe the same task as the original, and to highlight transferable skills instead of borrowing the job description's tools.
-
-**Current result:** 16/16 hard checks passing across 3 runs.
+**Derived metrics.** The model turned "grew monthly revenue from $8,000 to $12,500" into "drove 56% revenue growth." The check flagged 56 as a new number, but on review it was a correct calculation from the user's own figures (a 56.25% increase), not an invented claim. I decided to allow it: a percentage makes the bullet stronger, and every part of it comes from the user's input. The trade-off is that LLM arithmetic isn't guaranteed, so this case is reviewed by hand on each eval run rather than passed automatically.
 
 ### Running the eval
 
@@ -181,13 +184,10 @@ To remove everything: `cdk destroy`.
 
 ## Roadmap
 
-- **User accounts with Cognito**, so each user only sees their own history. Until then, the history endpoint should not be exposed publicly, since it returns all stored queries.
-- **History by date**: redesign the table with `userId` as the partition key and `createdAt` as the sort key, and use `Query` instead of `Scan` (access-pattern-first data modeling).
 - **Streaming responses** so bullets appear word by word.
 - **Observability**: structured logging, tracing with AWS X-Ray, and per-request token usage.
 - **API Gateway request validation** with a JSON schema, so invalid requests never invoke Lambda.
 - **LLM-as-judge scoring** in the eval for quality (relevance, strength), plus a held-out test set to check for overfitting the prompt.
-- **Data retention**: a DynamoDB TTL to automatically delete stored resume text after 30 days.
 
 ---
 
