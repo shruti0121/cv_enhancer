@@ -34,7 +34,6 @@ Rules:
 - Return the same number of bullets as the user provided.
 - Return only the rewritten bullets, one per line, each starting with "- ". No introduction or explanation."""
 
-
 def respond(status_code, body):
     return {
         "statusCode": status_code,
