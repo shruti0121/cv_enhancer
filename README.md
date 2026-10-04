@@ -17,17 +17,7 @@ The second row matters most: the app improves wording but never claims experienc
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    U[Browser] -->|HTTPS| CF[CloudFront + Route 53]
-    CF --> S3[(S3: static site + config.json)]
-    U -->|POST /cv_enhancer| API[API Gateway<br/>throttled, CORS-restricted]
-    API --> Q[Lambda: query.py]
-    Q -->|Converse API| BR[Amazon Bedrock<br/>Claude Haiku 4.5]
-    U -->|GET /cv_enhancer_database| API
-    API --> D[Lambda: database.py]
-    D --> DB[(DynamoDB)]
-```
+![AWS Architecture](architecture.png)
 
 | Layer | Service | Purpose |
 |---|---|---|
@@ -35,7 +25,6 @@ flowchart LR
 | API | API Gateway (REST) | Public endpoints with throttling and CORS locked to the site's domain |
 | Compute | AWS Lambda (Python 3.13) | Validates input, builds the prompt, calls the model |
 | AI | Amazon Bedrock, Claude Haiku 4.5 | Rewrites the bullets, called through a US cross-region inference profile |
-| Data | DynamoDB (on-demand) | Stores enhancement history |
 | Infrastructure | AWS CDK (TypeScript) | The entire stack is defined as code and deploys with one command |
 
 ---
